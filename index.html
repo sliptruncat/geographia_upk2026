@@ -998,3 +998,63 @@ function applyTopic(t){
 function openTopic(t){
   openPanel(`<div class="st">${esc(t.g)} · тема семинара</div><div class="nm">${esc(t.t)}</div><p class="note">${esc(t.d)}</p>
     <div class="items">${t.items.map((it,i)=>`<button data-it="${i}" class="${it.x?"x2":""}"><b><i></i>${esc(itemName(it))}</b><span>${esc(it.t)}</span></button>`).join("")}</div>`);
+}
+function focusItem(it){
+  if (it.c) { const f=byName.get(it.c); if(f){ pinPath.attr("d",path(f)); zoomTo(path.bounds(f)); } }
+  else if (it.r) { const f=regByName.get(it.r); if(f){ pinPath.attr("d",path(f)); zoomTo(path.bounds(f)); } }
+  else if (it.b) { const p=pairByKey.get([...it.b].sort().join("|")); if(p){ pinPath.attr("d",p.d); zoomTo(path.bounds(p.m)); } }
+  else if (it.p) { const [x,y]=proj([it.p[1],it.p[0]]); pinPath.attr("d",null); zoomTo([[x-30,y-20],[x+30,y+20]],12); }
+}
+
+// ── Слои
+const modesEl=document.getElementById("modes"), legend=document.getElementById("legend");
+function paint(m){
+  const counts={};
+  cPaths.attr("class",d=>{const k=m.cls(d.properties.name); if(k) counts[k]=(counts[k]||0)+1; return "c"+(k?" k-"+k:"");});
+  rPaths.attr("class",d=>{const k=m.reg?m.reg(d.properties.name):""; if(k) counts[k]=(counts[k]||0)+1; return "rg"+(k?" k-"+k:"");});
+  return counts;
+}
+function setMode(id){
+  const m=MODES.find(x=>x.id===id)||MODES[0];
+  modesEl.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.m===m.id));
+  legend.classList.toggle("wide", m.id==="topics");
+  if (m.id==="topics") {
+    let html=`<div class="lt">${m.title}</div><div class="topics">`, g="";
+    TOPICS.forEach((t,i)=>{ if(t.g!==g){ g=t.g; html+=`<div class="gh">${g}</div>`; } html+=`<button data-t="${i}" aria-pressed="false">${esc(t.t)}</button>`; });
+    legend.innerHTML=html+"</div>";
+    applyTopic(curTopic||TOPICS[0]);
+  } else {
+    gTB.selectAll("*").remove(); gMk.selectAll("*").remove();
+    const counts=paint(m);
+    legend.innerHTML = m.items.length ? `<div class="lt">${m.title}</div>`+m.items.map(([k,l])=>`<div class="li"><span class="sw" style="background:var(--k-${k})"></span>${l}<span class="n">${counts[k]||0}</span></div>`).join("") : "";
+    if (m.id==="ru") zoomTo(path.bounds(byName.get("Russia")),3,0.85);
+  }
+  try{localStorage.setItem("atlas-mode",m.id);}catch(_){}
+}
+legend.addEventListener("click",e=>{ const b=e.target.closest("[data-t]"); if(!b) return; const t=TOPICS[+b.dataset.t]; applyTopic(t); openTopic(t); });
+MODES.forEach(m=>{const b=document.createElement("button");b.textContent=m.label;b.dataset.m=m.id;b.onclick=()=>setMode(m.id);modesEl.appendChild(b);});
+let saved="conf"; try{saved=localStorage.getItem("atlas-mode")||"conf";}catch(_){}
+setMode(saved);
+
+// ── Тема оформления
+const root=document.documentElement;
+function curTheme(){ return root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"); }
+function setTheme(th){ root.dataset.theme=th; try{localStorage.setItem("atlas-theme",th);}catch(_){} syncTheme(); }
+function syncTheme(){ const th=curTheme(); document.getElementById("th-l").setAttribute("aria-pressed",th==="light"); document.getElementById("th-d").setAttribute("aria-pressed",th==="dark"); }
+try{ const th=localStorage.getItem("atlas-theme"); if(th) root.dataset.theme=th; }catch(_){}
+document.getElementById("th-l").onclick=()=>setTheme("light");
+document.getElementById("th-d").onclick=()=>setTheme("dark");
+syncTheme();
+
+// ── Поиск: страны и субъекты РФ
+const dl=document.getElementById("names"), ruToName=new Map();
+feats.map(f=>f.properties.name).forEach(n=>ruToName.set(ru(n).toLowerCase(),{n}));
+regFeats.forEach(f=>ruToName.set(regName(f.properties.name).toLowerCase(),{r:f.properties.name}));
+dl.innerHTML=[...ruToName.values()].map(v=>v.n?ru(v.n):regName(v.r)).sort((a,b)=>a.localeCompare(b,"ru")).map(n=>`<option value="${esc(n)}">`).join("");
+const q=document.getElementById("q");
+function go(){ const v=ruToName.get(q.value.trim().toLowerCase()); if(!v) return; v.n?select(v.n,true):selectRegion(v.r,true); q.blur(); }
+q.addEventListener("change",go);
+q.addEventListener("keydown",e=>{ if(e.key==="Enter") go(); });
+</script>
+
+</body></html>
